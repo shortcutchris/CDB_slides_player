@@ -1,0 +1,9 @@
+# Rust/Tauri Build-Artefakte
+player-app/src-tauri/target/
+player-app/src-tauri/gen/
+
+# Lokale Nutzerdaten
+player-web/playlists.json
+
+# macOS
+.DS_Store

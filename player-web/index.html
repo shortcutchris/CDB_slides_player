@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CDBrain · Slide Player</title>
+<style>
+  :root{
+    --bg:#060f20; --panel:rgba(255,255,255,.04); --panel-2:rgba(255,255,255,.06);
+    --line:rgba(255,255,255,.10); --blue:#00AAFF; --orange:#FFAA3A;
+    --txt:#F5F8FF; --muted:#AEBBCD; color-scheme:dark;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    font-family:"Inter","Helvetica Neue",system-ui,sans-serif;color:var(--txt);
+    background:
+      radial-gradient(1100px 600px at 84% -10%,rgba(0,170,255,.16),transparent 60%),
+      radial-gradient(900px 520px at 2% 112%,rgba(255,170,58,.12),transparent 55%),
+      var(--bg);
+    -webkit-font-smoothing:antialiased;overflow:hidden;
+  }
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+
+  /* ── Library view ───────────────────────────────────────────── */
+  .app{display:flex;flex-direction:column;height:100vh;padding:28px 32px 24px}
+  header{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}
+  .brand{display:flex;align-items:center;gap:13px}
+  .logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#33bbff,#00AAFF);
+    display:flex;align-items:center;justify-content:center;color:#060f20}
+  .brand h1{font-size:20px;font-weight:800;letter-spacing:-.01em}
+  .brand .sub{font-size:12px;letter-spacing:.32em;color:var(--blue);font-weight:700;text-transform:uppercase}
+  .topbtns{display:flex;gap:10px}
+
+  .btn{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600;
+    padding:10px 16px;border-radius:10px;border:1px solid var(--line);background:var(--panel);
+    color:var(--txt);transition:border-color .15s,background .15s,transform .05s}
+  .btn:hover{border-color:rgba(0,170,255,.5);background:var(--panel-2)}
+  .btn:active{transform:translateY(1px)}
+  .btn.primary{background:linear-gradient(135deg,#33bbff,#00AAFF);color:#06101f;border:none;font-weight:800}
+  .btn.primary:hover{filter:brightness(1.06)}
+  .btn:disabled{opacity:.4;cursor:not-allowed;filter:none}
+  .btn.icon{padding:10px;border-radius:10px}
+
+  main{flex:1;display:flex;gap:24px;min-height:0}
+
+  /* Drop zone */
+  .drop{flex:0 0 320px;border:2px dashed var(--line);border-radius:18px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    text-align:center;padding:30px;transition:border-color .15s,background .15s;color:var(--muted)}
+  .drop.hot{border-color:var(--blue);background:rgba(0,170,255,.07);color:var(--txt)}
+  .drop .big{font-size:17px;font-weight:700;color:var(--txt)}
+  .drop .hint{font-size:13px;line-height:1.5}
+  .drop svg{opacity:.85}
+
+  /* Playlist */
+  .list-wrap{flex:1;display:flex;flex-direction:column;min-width:0}
+  .list-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .list-head .count{font-size:13px;color:var(--muted)}
+  .list{flex:1;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));
+    gap:14px;align-content:start;padding-right:4px}
+  .card{position:relative;border:1px solid var(--line);border-radius:14px;overflow:hidden;
+    background:#0a1428;aspect-ratio:16/9;transition:border-color .15s,transform .08s}
+  .card:hover{border-color:rgba(0,170,255,.55)}
+  .card.dragging{opacity:.45}
+  .card.over{border-color:var(--orange)}
+  .card img,.card video{width:100%;height:100%;object-fit:cover;display:block;background:#0a1428}
+  .card .idx{position:absolute;top:8px;left:8px;width:24px;height:24px;border-radius:7px;
+    background:rgba(6,15,32,.82);border:1px solid var(--line);font-size:12px;font-weight:800;
+    display:flex;align-items:center;justify-content:center}
+  .card .type{position:absolute;top:8px;right:8px;font-size:10px;font-weight:700;letter-spacing:.08em;
+    padding:3px 7px;border-radius:6px;background:rgba(6,15,32,.82);border:1px solid var(--line);color:var(--muted)}
+  .card .type.vid{color:var(--orange);border-color:rgba(255,170,58,.4)}
+  .card .name{position:absolute;left:0;right:0;bottom:0;padding:7px 9px;font-size:11px;
+    background:linear-gradient(0deg,rgba(6,15,32,.92),transparent);white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+  .card .rm{position:absolute;bottom:8px;right:8px;width:26px;height:26px;border-radius:7px;
+    background:rgba(6,15,32,.82);border:1px solid var(--line);display:flex;align-items:center;
+    justify-content:center;opacity:0;transition:opacity .12s}
+  .card:hover .rm{opacity:1}
+  .card .rm:hover{border-color:#ff5a5a;color:#ff7a7a}
+  .card .play{position:absolute;inset:0;margin:auto;width:38px;height:38px;border-radius:50%;
+    background:rgba(0,170,255,.85);display:flex;align-items:center;justify-content:center;pointer-events:none}
+
+  /* Settings footer */
+  .settings{display:flex;align-items:center;gap:22px;margin-top:18px;padding-top:16px;
+    border-top:1px solid var(--line);flex-wrap:wrap}
+  .field{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--muted)}
+  .field input[type=number]{width:62px;background:var(--panel);border:1px solid var(--line);
+    color:var(--txt);border-radius:8px;padding:7px 9px;font:inherit;font-size:13px}
+  .switch{position:relative;width:42px;height:24px;border-radius:999px;background:var(--panel-2);
+    border:1px solid var(--line);transition:background .15s}
+  .switch::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;
+    background:var(--muted);transition:transform .15s,background .15s}
+  .switch.on{background:rgba(0,170,255,.35)}
+  .switch.on::after{transform:translateX(18px);background:var(--blue)}
+  .field.toggle{cursor:pointer;user-select:none}
+  .spacer{flex:1}
+
+  /* ── Presentation overlay ───────────────────────────────────── */
+  .stage{position:fixed;inset:0;background:#000;display:none;align-items:center;justify-content:center;z-index:50}
+  .stage.show{display:flex}
+  .stage .media{max-width:100%;max-height:100%;width:100%;height:100%;object-fit:contain;
+    opacity:0;transition:opacity .45s ease}
+  .stage .media.in{opacity:1}
+  .stage.idle{cursor:none}
+  .bar{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);display:flex;align-items:center;gap:8px;
+    background:rgba(6,15,32,.78);border:1px solid var(--line);backdrop-filter:blur(8px);
+    border-radius:14px;padding:8px;transition:opacity .35s;z-index:51}
+  .stage.idle .bar{opacity:0;pointer-events:none}
+  .bar .cb{width:40px;height:40px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+    border:1px solid transparent}
+  .bar .cb:hover{background:var(--panel-2);border-color:var(--line)}
+  .bar .pos{font-size:13px;color:var(--muted);padding:0 10px;min-width:54px;text-align:center}
+  .bar .sep{width:1px;height:22px;background:var(--line);margin:0 2px}
+  .progress{position:fixed;left:0;top:0;height:3px;background:var(--blue);width:0;z-index:51;
+    transition:width .25s linear;box-shadow:0 0 10px rgba(0,170,255,.8)}
+  .stage.idle .progress{opacity:.5}
+</style>
+</head>
+<body>
+  <div class="app" id="app">
+    <header>
+      <div class="brand">
+        <div class="logo">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+        </div>
+        <div>
+          <div class="sub">CDBrain</div>
+          <h1>Slide Player</h1>
+        </div>
+      </div>
+      <div class="topbtns">
+        <button class="btn" id="addBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          Slides hinzufügen
+        </button>
+        <button class="btn" id="clearBtn">Leeren</button>
+        <button class="btn primary" id="presentBtn" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg>
+          Präsentieren
+        </button>
+      </div>
+    </header>
+
+    <main>
+      <div class="drop" id="drop">
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <div class="big">Bilder &amp; Videos hierher ziehen</div>
+        <div class="hint">PNG · JPG · WEBP · GIF · MP4 · WEBM · MOV<br>oder oben „Slides hinzufügen"</div>
+      </div>
+
+      <div class="list-wrap">
+        <div class="list-head">
+          <div class="count" id="count">Noch keine Slides geladen</div>
+          <div class="count">Ziehen zum Sortieren · Hover für ✕</div>
+        </div>
+        <div class="list" id="list"></div>
+        <div class="settings">
+          <div class="field">
+            <span>Bilddauer</span>
+            <input type="number" id="imgDur" min="1" max="120" step="1" value="6"> <span>Sek.</span>
+          </div>
+          <div class="field toggle" id="loopShowF">
+            <span>Show loopen</span><span class="switch on" id="loopShow"></span>
+          </div>
+          <div class="field toggle" id="loopVidF">
+            <span>Videos loopen</span><span class="switch" id="loopVid"></span>
+          </div>
+          <div class="spacer"></div>
+          <div class="field">Tasten im Vollbild: <b style="color:var(--txt)">␣</b> Pause · <b style="color:var(--txt)">← →</b> · <b style="color:var(--txt)">F</b> · <b style="color:var(--txt)">Esc</b></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Presentation -->
+  <div class="stage" id="stage">
+    <div class="progress" id="progress"></div>
+    <div class="bar" id="bar">
+      <button class="cb" id="prev" title="Zurück (←)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+      <button class="cb" id="play" title="Play/Pause (␣)"></button>
+      <button class="cb" id="next" title="Weiter (→)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>
+      <div class="pos" id="pos">1 / 1</div>
+      <div class="sep"></div>
+      <button class="cb" id="fs" title="Vollbild (F)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 1-2 2h-3"/></svg></button>
+      <button class="cb" id="exit" title="Beenden (Esc)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+  </div>
+
+  <input type="file" id="file" accept="image/*,video/*" multiple hidden>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const ICON_PLAY  = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg>';
+  const ICON_PAUSE = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
+
+  // ── State ────────────────────────────────────────────────────
+  let slides = [];               // {id, file, url, type:'image'|'video', name}
+  let cur = 0, timer = null, stall = null, paused = false, seq = 0;
+  const settings = loadSettings();
+
+  function loadSettings(){
+    let s = {imgDur:6, loopShow:true, loopVid:false};
+    try { Object.assign(s, JSON.parse(localStorage.getItem("cdb-player")||"{}")); } catch(e){}
+    return s;
+  }
+  function saveSettings(){ try{ localStorage.setItem("cdb-player", JSON.stringify(settings)); }catch(e){} }
+
+  // ── Auto-Preload ─────────────────────────────────────────────
+  // Pfade (relativ zu dieser HTML-Datei ODER absolut) werden beim Öffnen
+  // automatisch geladen — so kann eine generierte Show den Player fertig
+  // befüllt hochfahren. Reihenfolge = Abspielreihenfolge.
+  const PRELOAD = [
+    // "../../sales/whats-next/whats-next-cdbrain-en.png",
+    // "../../sales/whats-next/whats-next-cdbrain-animated.mp4",
+  ];
+  const VIDEO_EXT = /\.(mp4|webm|mov|m4v|ogv)$/i;
+  const IMAGE_EXT = /\.(png|jpe?g|webp|gif|avif|bmp)$/i;
+
+  function addUrls(paths){
+    paths.forEach(p => {
+      const type = VIDEO_EXT.test(p) ? "video" : IMAGE_EXT.test(p) ? "image" : null;
+      if(!type) return;
+      slides.push({id:(seq++), file:null, url:p, type, name:p.split("/").pop()});
+    });
+    render();
+  }
+
+  // ── Add / remove slides ──────────────────────────────────────
+  function addFiles(fileList){
+    [...fileList].forEach(file => {
+      const type = file.type.startsWith("video") ? "video"
+                 : file.type.startsWith("image") ? "image" : null;
+      if(!type) return;
+      slides.push({id:(seq++), file, url:URL.createObjectURL(file), type, name:file.name});
+    });
+    render();
+  }
+  function removeSlide(id){
+    const i = slides.findIndex(s=>s.id===id);
+    if(i<0) return;
+    if(slides[i].url.startsWith("blob:")) URL.revokeObjectURL(slides[i].url);
+    slides.splice(i,1);
+    render();
+  }
+  function clearAll(){
+    slides.forEach(s=>{ if(s.url.startsWith("blob:")) URL.revokeObjectURL(s.url); });
+    slides = []; render();
+  }
+
+  // ── Render library ───────────────────────────────────────────
+  function render(){
+    const list = $("list"); list.innerHTML = "";
+    slides.forEach((s,i) => {
+      const card = document.createElement("div");
+      card.className = "card"; card.draggable = true; card.dataset.id = s.id;
+      const media = s.type==="video"
+        ? `<video src="${s.url}" muted preload="metadata"></video><div class="play"><svg width="16" height="16" viewBox="0 0 24 24" fill="#06101f" stroke="none"><polygon points="7 5 19 12 7 19 7 5"/></svg></div>`
+        : `<img src="${s.url}" alt="">`;
+      card.innerHTML = `${media}
+        <div class="idx">${i+1}</div>
+        <div class="type ${s.type==='video'?'vid':''}">${s.type==='video'?'VIDEO':'BILD'}</div>
+        <div class="name">${s.name}</div>
+        <button class="rm" title="Entfernen"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>`;
+      card.querySelector(".rm").addEventListener("click", (e)=>{ e.stopPropagation(); removeSlide(s.id); });
+      wireDrag(card);
+      list.appendChild(card);
+    });
+    const n = slides.length;
+    $("count").textContent = n ? `${n} Slide${n>1?"s":""} geladen` : "Noch keine Slides geladen";
+    $("presentBtn").disabled = n===0;
+  }
+
+  // ── Reorder via drag & drop ──────────────────────────────────
+  let dragId = null;
+  function wireDrag(card){
+    card.addEventListener("dragstart", ()=>{ dragId = +card.dataset.id; card.classList.add("dragging"); });
+    card.addEventListener("dragend", ()=>{ dragId=null; card.classList.remove("dragging"); document.querySelectorAll(".card.over").forEach(c=>c.classList.remove("over")); });
+    card.addEventListener("dragover", (e)=>{ e.preventDefault(); card.classList.add("over"); });
+    card.addEventListener("dragleave", ()=> card.classList.remove("over"));
+    card.addEventListener("drop", (e)=>{
+      e.preventDefault(); e.stopPropagation(); card.classList.remove("over");
+      const from = slides.findIndex(s=>s.id===dragId);
+      const to   = slides.findIndex(s=>s.id=== +card.dataset.id);
+      if(from<0||to<0||from===to) return;
+      const [m] = slides.splice(from,1); slides.splice(to,0,m); render();
+    });
+  }
+
+  // ── Presentation ─────────────────────────────────────────────
+  function present(start=0){
+    if(!slides.length) return;
+    cur = start; paused = false;
+    $("stage").classList.add("show");
+    $("app").style.display = "none";
+    document.documentElement.requestFullscreen?.().catch(()=>{});
+    show();
+    wake();
+  }
+  function endPresent(){
+    clearTimeout(timer); clearTimeout(stall);
+    const stage = $("stage");
+    stage.querySelectorAll(".media").forEach(m=>m.remove());
+    stage.classList.remove("show");
+    $("app").style.display = "flex";
+    if(document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+  }
+
+  function show(){
+    clearTimeout(timer); clearTimeout(stall);
+    const stage = $("stage");
+    stage.querySelectorAll(".media").forEach(m=>{ if(m.tagName==="VIDEO"){m.pause();} m.remove(); });
+    const s = slides[cur];
+    $("pos").textContent = `${cur+1} / ${slides.length}`;
+    $("progress").style.width = `${((cur+1)/slides.length)*100}%`;
+    $("play").innerHTML = paused ? ICON_PLAY : ICON_PAUSE;
+
+    let el;
+    if(s.type==="image"){
+      el = document.createElement("img"); el.className="media"; el.src=s.url;
+      stage.insertBefore(el, $("progress").nextSibling);
+      requestAnimationFrame(()=>el.classList.add("in"));
+      if(!paused) timer = setTimeout(next, Math.max(1,settings.imgDur)*1000);
+    } else {
+      el = document.createElement("video"); el.className="media"; el.src=s.url;
+      el.muted = true; el.playsInline = true; el.loop = settings.loopVid;
+      stage.insertBefore(el, $("progress").nextSibling);
+      requestAnimationFrame(()=>el.classList.add("in"));
+      if(!paused) el.play().catch(()=>{});
+      el.addEventListener("ended", ()=>{ if(!settings.loopVid && !paused) next(); });
+      // Kiosk-Robustheit: bei Lade-/Decodier-Fehler oder Dauer-Stall nicht hängenbleiben
+      el.addEventListener("error", ()=>{ if(!paused) next(); });
+      el.addEventListener("playing", ()=>clearTimeout(stall), {once:true});
+      stall = setTimeout(()=>{ if(!paused && el.isConnected && el.readyState < 2) next(); }, 12000);
+    }
+  }
+  function next(){
+    if(cur < slides.length-1) cur++;
+    else if(settings.loopShow) cur = 0;
+    else { return; }   // ende, kein Loop → stehen bleiben
+    show();
+  }
+  function prev(){ cur = (cur-1+slides.length)%slides.length; show(); }
+  function togglePause(){
+    paused = !paused;
+    const v = $("stage").querySelector("video.media");
+    if(paused){ clearTimeout(timer); if(v) v.pause(); }
+    else { if(v){ v.play().catch(()=>{}); } else { timer=setTimeout(next, Math.max(1,settings.imgDur)*1000); } }
+    $("play").innerHTML = paused ? ICON_PLAY : ICON_PAUSE;
+  }
+
+  // ── Idle / control auto-hide ─────────────────────────────────
+  let idle;
+  function wake(){
+    const st=$("stage"); st.classList.remove("idle");
+    clearTimeout(idle); idle=setTimeout(()=>st.classList.add("idle"),2800);
+  }
+
+  // ── Wiring ───────────────────────────────────────────────────
+  $("addBtn").addEventListener("click", ()=>$("file").click());
+  $("file").addEventListener("change", (e)=>{ addFiles(e.target.files); e.target.value=""; });
+  $("clearBtn").addEventListener("click", clearAll);
+  $("presentBtn").addEventListener("click", ()=>present(0));
+  $("prev").addEventListener("click", prev);
+  $("next").addEventListener("click", next);
+  $("play").addEventListener("click", togglePause);
+  $("exit").addEventListener("click", endPresent);
+  $("fs").addEventListener("click", ()=>{ if(document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); });
+
+  // Drop zone (whole window while in library)
+  const drop = $("drop");
+  ["dragenter","dragover"].forEach(ev=>window.addEventListener(ev,(e)=>{ e.preventDefault(); if($("app").style.display!=="none") drop.classList.add("hot"); }));
+  ["dragleave","drop"].forEach(ev=>window.addEventListener(ev,(e)=>{ e.preventDefault(); drop.classList.remove("hot"); }));
+  window.addEventListener("drop",(e)=>{ if(e.dataTransfer?.files?.length && !dragId) addFiles(e.dataTransfer.files); });
+
+  // Settings inputs
+  const sw=(el,key)=>{ el.classList.toggle("on",settings[key]); };
+  sw($("loopShow"),"loopShow"); sw($("loopVid"),"loopVid"); $("imgDur").value=settings.imgDur;
+  $("imgDur").addEventListener("change",()=>{ settings.imgDur=Math.max(1,+$("imgDur").value||6); saveSettings(); });
+  $("loopShowF").addEventListener("click",()=>{ settings.loopShow=!settings.loopShow; sw($("loopShow"),"loopShow"); saveSettings(); });
+  $("loopVidF").addEventListener("click",()=>{ settings.loopVid=!settings.loopVid; sw($("loopVid"),"loopVid"); const v=$("stage").querySelector("video.media"); if(v)v.loop=settings.loopVid; saveSettings(); });
+
+  // Keyboard (present mode)
+  document.addEventListener("keydown",(e)=>{
+    if(!$("stage").classList.contains("show")) return;
+    if(e.key==="ArrowRight") next();
+    else if(e.key==="ArrowLeft") prev();
+    else if(e.key===" "){ e.preventDefault(); togglePause(); }
+    else if(e.key==="f"||e.key==="F"){ if(document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); }
+    else if(e.key==="Escape" && !document.fullscreenElement) endPresent();
+    wake();
+  });
+  $("stage").addEventListener("mousemove", wake);
+
+  if(PRELOAD.length) addUrls(PRELOAD); else render();
+})();
+</script>
+</body>
+</html>

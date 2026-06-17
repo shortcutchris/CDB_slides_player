@@ -1,0 +1,4 @@
+# Rust/Tauri Build-Artefakte
+src-tauri/target/
+# von Tauri generierte Schemas/Capabilities
+src-tauri/gen/

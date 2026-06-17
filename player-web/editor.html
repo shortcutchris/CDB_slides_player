@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CDBrain · Slide Player — Verwaltung</title>
+<style>
+  :root{
+    --bg:#060f20; --panel:rgba(255,255,255,.04); --panel-2:rgba(255,255,255,.07);
+    --line:rgba(255,255,255,.10); --blue:#00AAFF; --orange:#FFAA3A;
+    --txt:#F5F8FF; --muted:#AEBBCD; --danger:#ff6a6a; color-scheme:dark;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{font-family:"Inter","Helvetica Neue",system-ui,sans-serif;color:var(--txt);
+    background:
+      radial-gradient(1100px 600px at 86% -12%,rgba(0,170,255,.14),transparent 60%),
+      radial-gradient(900px 520px at 0% 112%,rgba(255,170,58,.10),transparent 55%),
+      var(--bg);
+    -webkit-font-smoothing:antialiased;overflow:hidden}
+  button,input{font-family:inherit}
+  button{cursor:pointer;border:none;background:none;color:inherit}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:6px}
+
+  .app{display:flex;flex-direction:column;height:100vh}
+  header{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:12px}
+  .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#33bbff,#00AAFF);display:flex;align-items:center;justify-content:center;color:#06101f}
+  .brand .sub{font-size:11px;letter-spacing:.3em;color:var(--blue);font-weight:700}
+  .brand h1{font-size:17px;font-weight:800}
+  .hgroup{display:flex;align-items:center;gap:14px}
+  .status{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:7px;min-width:96px;justify-content:flex-end}
+  .status .dot{width:8px;height:8px;border-radius:50%;background:#3fd07a;box-shadow:0 0 8px #3fd07a}
+  .status.saving .dot{background:var(--orange);box-shadow:0 0 8px var(--orange)}
+  .status.error .dot{background:var(--danger)}
+
+  .btn{display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;padding:9px 14px;border-radius:9px;border:1px solid var(--line);background:var(--panel);transition:.13s}
+  .btn:hover{border-color:rgba(0,170,255,.5);background:var(--panel-2)}
+  .btn.primary{background:linear-gradient(135deg,#33bbff,#00AAFF);color:#06101f;border:none;font-weight:800}
+  .btn.primary:hover{filter:brightness(1.07)}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn.sm{padding:6px 10px;font-size:12.5px}
+
+  main{flex:1;display:grid;grid-template-columns:248px 1fr 320px;min-height:0}
+  .col{min-height:0;display:flex;flex-direction:column;overflow:hidden}
+  .col.mid{border-left:1px solid var(--line);border-right:1px solid var(--line)}
+  .col-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px;flex:0 0 auto}
+  .col-head h2{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .scroll{overflow:auto;padding:0 12px 16px;flex:1}
+
+  /* Sidebar playlists */
+  .pl{display:flex;align-items:center;gap:8px;padding:10px 11px;border-radius:10px;border:1px solid transparent;margin-bottom:6px;cursor:pointer}
+  .pl:hover{background:var(--panel)}
+  .pl.active{background:rgba(0,170,255,.12);border-color:rgba(0,170,255,.4)}
+  .pl .nm{flex:1;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pl .ct{font-size:11px;color:var(--muted)}
+  .pl .acts{display:flex;gap:2px;opacity:0;transition:.12s}
+  .pl:hover .acts{opacity:1}
+  .pl .acts button{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+  .pl .acts button:hover{background:var(--panel-2);color:var(--txt)}
+  .pl .acts button.del:hover{color:var(--danger)}
+
+  /* Middle: current playlist */
+  .pl-title{display:flex;align-items:center;gap:10px;padding:0 16px 12px}
+  .pl-title input{flex:1;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--txt);font-size:22px;font-weight:800;padding:4px 2px}
+  .pl-title input:focus{outline:none;border-bottom-color:var(--blue)}
+  .settings{display:flex;align-items:center;gap:18px;padding:0 16px 12px;flex-wrap:wrap}
+  .field{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)}
+  .field input[type=number]{width:56px;background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:6px 8px;font-size:12.5px}
+  .switch{position:relative;width:40px;height:22px;border-radius:999px;background:var(--panel-2);border:1px solid var(--line);cursor:pointer}
+  .switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--muted);transition:.15s}
+  .switch.on{background:rgba(0,170,255,.35)}
+  .switch.on::after{transform:translateX(18px);background:var(--blue)}
+
+  .item{display:flex;align-items:center;gap:12px;padding:8px;border:1px solid var(--line);border-radius:11px;background:var(--panel);margin-bottom:8px}
+  .item.dragging{opacity:.4}
+  .item.over{border-color:var(--orange)}
+  .item .num{width:24px;text-align:center;font-weight:800;font-size:13px;color:var(--muted);flex:0 0 auto}
+  .item .thumb{width:104px;height:59px;border-radius:7px;overflow:hidden;background:#0a1428;flex:0 0 auto;position:relative}
+  .item .thumb img,.item .thumb video{width:100%;height:100%;object-fit:cover}
+  .item .thumb .pb{position:absolute;inset:0;margin:auto;width:24px;height:24px;border-radius:50%;background:rgba(0,170,255,.85);display:flex;align-items:center;justify-content:center}
+  .item .meta{flex:1;min-width:0}
+  .item .meta .nm{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .item .meta .pth{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .item .badge{font-size:9.5px;font-weight:700;letter-spacing:.07em;padding:2px 6px;border-radius:5px;background:rgba(255,255,255,.06);color:var(--muted)}
+  .item .badge.vid{color:var(--orange)}
+  .item .ctrls{display:flex;gap:3px;flex:0 0 auto}
+  .item .ctrls button{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--muted);border:1px solid transparent}
+  .item .ctrls button:hover{background:var(--panel-2);color:var(--txt);border-color:var(--line)}
+  .item .ctrls button:disabled{opacity:.3;cursor:default}
+  .item .ctrls .del:hover{color:var(--danger);border-color:rgba(255,106,106,.4)}
+  .item .grip{cursor:grab;color:var(--muted);padding:0 2px}
+
+  .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--muted);text-align:center;gap:10px;padding:30px}
+  .empty svg{opacity:.7}
+
+  /* Library */
+  .libsearch{margin:0 12px 10px;display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:8px 11px}
+  .libsearch input{flex:1;background:transparent;border:none;color:var(--txt);font-size:13px}
+  .libsearch input:focus{outline:none}
+  .libgroup{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:12px 4px 7px}
+  .libgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .lib{position:relative;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#0a1428;aspect-ratio:16/9;cursor:pointer}
+  .lib:hover{border-color:rgba(0,170,255,.6)}
+  .lib img,.lib video{width:100%;height:100%;object-fit:cover}
+  .lib .nm{position:absolute;left:0;right:0;bottom:0;padding:5px 7px;font-size:10.5px;background:linear-gradient(0deg,rgba(6,15,32,.93),transparent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#cdd6e4}
+  .lib .add{position:absolute;top:6px;right:6px;width:24px;height:24px;border-radius:7px;background:rgba(0,170,255,.9);color:#06101f;display:flex;align-items:center;justify-content:center;opacity:0;transition:.12s}
+  .lib:hover .add{opacity:1}
+  .lib .tp{position:absolute;top:6px;left:6px;font-size:9px;font-weight:700;padding:2px 5px;border-radius:5px;background:rgba(6,15,32,.85);color:var(--muted)}
+  .lib .tp.vid{color:var(--orange)}
+
+  /* Present overlay */
+  .stage{position:fixed;inset:0;background:#000;display:none;align-items:center;justify-content:center;z-index:60}
+  .stage.show{display:flex}
+  .stage .media{width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity .45s ease}
+  .stage .media.in{opacity:1}
+  .stage.idle{cursor:none}
+  .bar{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);display:flex;align-items:center;gap:8px;background:rgba(6,15,32,.8);border:1px solid var(--line);backdrop-filter:blur(8px);border-radius:14px;padding:8px;z-index:61;transition:opacity .35s}
+  .stage.idle .bar{opacity:0;pointer-events:none}
+  .bar .cb{width:40px;height:40px;border-radius:9px;display:flex;align-items:center;justify-content:center;border:1px solid transparent}
+  .bar .cb:hover{background:var(--panel-2);border-color:var(--line)}
+  .bar .pos{font-size:13px;color:var(--muted);padding:0 10px;min-width:54px;text-align:center}
+  .bar .sep{width:1px;height:22px;background:var(--line)}
+  .progress{position:fixed;top:0;left:0;height:3px;background:var(--blue);width:0;z-index:61;box-shadow:0 0 10px rgba(0,170,255,.8);transition:width .25s linear}
+  .stage.idle .progress{opacity:.5}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <div class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
+      <div><div class="sub">CDBRAIN</div><h1>Slide Player — Verwaltung</h1></div>
+    </div>
+    <div class="hgroup">
+      <div class="status" id="status"><span class="dot"></span><span id="statusTxt">Gespeichert</span></div>
+      <button class="btn primary" id="presentBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg> Präsentieren</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Playlists sidebar -->
+    <div class="col">
+      <div class="col-head"><h2>Playlists</h2>
+        <button class="btn sm" id="newPl"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg> Neu</button>
+      </div>
+      <div class="scroll" id="plList"></div>
+    </div>
+
+    <!-- Current playlist -->
+    <div class="col mid">
+      <div id="editorPane" style="display:flex;flex-direction:column;min-height:0;flex:1">
+        <div class="col-head" style="padding-bottom:4px"><h2>Reihenfolge</h2><span class="ct" id="itemCount" style="font-size:12px;color:var(--muted)"></span></div>
+        <div class="pl-title"><input id="plName" placeholder="Playlist-Name"></div>
+        <div class="settings">
+          <div class="field"><span>Bilddauer</span><input type="number" id="imgDur" min="1" max="120" value="6"> <span>Sek.</span></div>
+          <div class="field"><span>Show loopen</span><span class="switch" id="loopShow"></span></div>
+          <div class="field"><span>Videos loopen</span><span class="switch" id="loopVid"></span></div>
+        </div>
+        <div class="scroll" id="items"></div>
+      </div>
+      <div class="empty" id="noPl" style="display:none">
+        <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>
+        <div>Keine Playlist gewählt.<br>Links eine anlegen oder auswählen.</div>
+      </div>
+    </div>
+
+    <!-- Media library -->
+    <div class="col">
+      <div class="col-head"><h2>Medien-Bibliothek</h2><div style="display:flex;align-items:center;gap:10px"><span class="ct" id="mediaCount" style="font-size:12px;color:var(--muted)"></span><button class="btn sm" id="addAll" title="Alle angezeigten Medien zur Playlist hinzufügen"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg> Alle</button></div></div>
+      <div class="libsearch">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="libSearch" placeholder="Suchen…">
+      </div>
+      <div class="scroll" id="library"></div>
+    </div>
+  </main>
+</div>
+
+<!-- Present overlay -->
+<div class="stage" id="stage">
+  <div class="progress" id="progress"></div>
+  <div class="bar" id="bar">
+    <button class="cb" id="pPrev" title="Zurück (←)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+    <button class="cb" id="pPlay" title="Play/Pause (␣)"></button>
+    <button class="cb" id="pNext" title="Weiter (→)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>
+    <div class="pos" id="pPos">1 / 1</div>
+    <div class="sep"></div>
+    <button class="cb" id="pFs" title="Vollbild (F)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 1-2 2h-3"/></svg></button>
+    <button class="cb" id="pExit" title="Beenden (Esc)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (s,r=document) => r.querySelector(s);
+  const VIDEO_EXT = /\.(mp4|webm|mov|m4v|ogv)$/i;
+  const mediaUrl = (p) => "/media/" + p.split("/").map(encodeURIComponent).join("/");
+  const typeOf = (p) => VIDEO_EXT.test(p) ? "video" : "image";
+  const uid = () => "pl-" + Date.now().toString(36) + Math.floor(Math.random()*1e4).toString(36);
+  const ICON_PLAY  = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg>';
+  const ICON_PAUSE = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
+
+  let state = {media:[], playlists:[], curId:null};
+
+  // ── API ──────────────────────────────────────────────────
+  async function loadState(){
+    const r = await fetch("/api/state");
+    const d = await r.json();
+    state.media = d.media; state.playlists = d.playlists;
+    if(!state.curId || !state.playlists.find(p=>p.id===state.curId))
+      state.curId = state.playlists[0]?.id || null;
+    renderAll();
+  }
+  let saveTimer=null, saving=false;
+  function setStatus(kind, txt){ const s=$("#status"); s.className="status"+(kind?" "+kind:""); $("#statusTxt").textContent=txt; }
+  function save(){
+    setStatus("saving","Speichert…");
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      try{
+        await fetch("/api/playlists",{method:"PUT",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({playlists:state.playlists})});
+        setStatus("","Gespeichert");
+      }catch(e){ setStatus("error","Fehler beim Speichern"); }
+    }, 350);
+  }
+
+  const cur = () => state.playlists.find(p=>p.id===state.curId) || null;
+
+  // ── Playlist CRUD ────────────────────────────────────────
+  function newPlaylist(){
+    const p = {id:uid(), name:"Neue Playlist", settings:{imgDur:6,loopShow:true,loopVid:false}, items:[]};
+    state.playlists.push(p); state.curId=p.id; save(); renderAll(); $("#plName").focus(); $("#plName").select();
+  }
+  function duplicatePlaylist(id){
+    const src = state.playlists.find(p=>p.id===id); if(!src) return;
+    const copy = {id:uid(), name:src.name+" (Kopie)", settings:{...src.settings}, items:[...src.items]};
+    const i = state.playlists.indexOf(src); state.playlists.splice(i+1,0,copy);
+    state.curId=copy.id; save(); renderAll();
+  }
+  function deletePlaylist(id){
+    const p = state.playlists.find(x=>x.id===id); if(!p) return;
+    if(!confirm(`Playlist „${p.name}" löschen?`)) return;
+    state.playlists = state.playlists.filter(x=>x.id!==id);
+    if(state.curId===id) state.curId = state.playlists[0]?.id || null;
+    save(); renderAll();
+  }
+  const selectPlaylist = (id) => { state.curId=id; renderAll(); };
+
+  // ── Items ────────────────────────────────────────────────
+  function addItem(path){ const p=cur(); if(!p) return; p.items.push(path); save(); renderMain(); renderSidebar(); }
+  function removeItem(i){ const p=cur(); p.items.splice(i,1); save(); renderMain(); renderSidebar(); }
+  function moveItem(i,dir){ const p=cur(); const j=i+dir; if(j<0||j>=p.items.length) return;
+    [p.items[i],p.items[j]]=[p.items[j],p.items[i]]; save(); renderMain(); }
+  function addAllVisible(){
+    const q=$("#libSearch").value.trim().toLowerCase();
+    const list=state.media.filter(m=>!q||m.path.toLowerCase().includes(q));
+    if(!list.length) return;
+    if(!cur()) newPlaylist();
+    list.forEach(m=>cur().items.push(m.path));
+    save(); renderMain(); renderSidebar();
+  }
+
+  // ── Render ───────────────────────────────────────────────
+  function thumb(path){
+    const t = typeOf(path), u = mediaUrl(path);
+    return t==="video"
+      ? `<video src="${u}" muted preload="metadata"></video><div class="pb"><svg width="11" height="11" viewBox="0 0 24 24" fill="#06101f"><polygon points="7 5 19 12 7 19 7 5"/></svg></div>`
+      : `<img src="${u}" alt="">`;
+  }
+  function renderSidebar(){
+    const el=$("#plList"); el.innerHTML="";
+    state.playlists.forEach(p => {
+      const row=document.createElement("div");
+      row.className="pl"+(p.id===state.curId?" active":"");
+      row.innerHTML=`<div style="flex:1;min-width:0"><div class="nm">${esc(p.name)}</div><div class="ct">${p.items.length} Slide${p.items.length!==1?"s":""}</div></div>
+        <div class="acts">
+          <button title="Duplizieren" data-a="dup"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+          <button class="del" title="Löschen" data-a="del"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2m-9 0v14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V6"/></svg></button>
+        </div>`;
+      row.addEventListener("click",(e)=>{ const a=e.target.closest("[data-a]"); if(a){ e.stopPropagation(); a.dataset.a==="dup"?duplicatePlaylist(p.id):deletePlaylist(p.id); } else selectPlaylist(p.id); });
+      el.appendChild(row);
+    });
+  }
+  function renderMain(){
+    const p=cur();
+    $("#editorPane").style.display = p?"flex":"none";
+    $("#noPl").style.display = p?"none":"flex";
+    $("#presentBtn").disabled = !p || p.items.length===0;
+    if(!p) return;
+    $("#plName").value = p.name;
+    $("#imgDur").value = p.settings.imgDur;
+    $("#loopShow").classList.toggle("on", !!p.settings.loopShow);
+    $("#loopVid").classList.toggle("on", !!p.settings.loopVid);
+    $("#itemCount").textContent = p.items.length ? `${p.items.length} Slides` : "";
+    const el=$("#items"); el.innerHTML="";
+    if(!p.items.length){ el.innerHTML=`<div class="empty"><div>Noch leer — rechts aus der Bibliothek hinzufügen.</div></div>`; return; }
+    p.items.forEach((path,i) => {
+      const name = path.split("/").pop(), t=typeOf(path);
+      const row=document.createElement("div"); row.className="item"; row.draggable=true; row.dataset.i=i;
+      row.innerHTML=`<div class="grip">⋮⋮</div><div class="num">${i+1}</div>
+        <div class="thumb">${thumb(path)}</div>
+        <div class="meta"><div class="nm">${esc(name)} <span class="badge ${t==='video'?'vid':''}">${t==='video'?'VIDEO':'BILD'}</span></div><div class="pth">${esc(path)}</div></div>
+        <div class="ctrls">
+          <button data-m="-1" title="Nach vorne">${arrow('up')}</button>
+          <button data-m="1" title="Nach hinten">${arrow('down')}</button>
+          <button class="del" data-m="x" title="Entfernen"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>`;
+      row.querySelector('[data-m="-1"]').disabled = i===0;
+      row.querySelector('[data-m="1"]').disabled = i===p.items.length-1;
+      row.querySelectorAll("[data-m]").forEach(b=>b.addEventListener("click",()=>{
+        const m=b.dataset.m; m==="x"?removeItem(i):moveItem(i,+m);
+      }));
+      wireItemDrag(row);
+      el.appendChild(row);
+    });
+  }
+  function renderLibrary(){
+    const q=$("#libSearch").value.trim().toLowerCase();
+    const el=$("#library"); el.innerHTML="";
+    $("#mediaCount").textContent = `${state.media.length} Dateien`;
+    const groups={};
+    state.media.filter(m=>!q || m.path.toLowerCase().includes(q)).forEach(m=>{ (groups[m.dir||"."]=groups[m.dir||"."]||[]).push(m); });
+    Object.keys(groups).sort().forEach(dir=>{
+      const h=document.createElement("div"); h.className="libgroup"; h.textContent = dir==="." ? "(Wurzel)" : dir;
+      el.appendChild(h);
+      const grid=document.createElement("div"); grid.className="libgrid";
+      groups[dir].forEach(m=>{
+        const c=document.createElement("div"); c.className="lib"; c.title="Hinzufügen: "+m.path;
+        c.innerHTML=`${thumb(m.path)}<div class="tp ${m.type==='video'?'vid':''}">${m.type==='video'?'VIDEO':'BILD'}</div>
+          <div class="add"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+          <div class="nm">${esc(m.name)}</div>`;
+        c.addEventListener("click",()=>{ if(cur()) addItem(m.path); else { newPlaylist(); addItem(m.path); } });
+        grid.appendChild(c);
+      });
+      el.appendChild(grid);
+    });
+  }
+  function renderAll(){ renderSidebar(); renderMain(); renderLibrary(); }
+
+  const esc = (s) => String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const arrow = (d) => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="${d==='up'?'18 15 12 9 6 15':'6 9 12 15 18 9'}"/></svg>`;
+
+  // ── Drag reorder (items) ─────────────────────────────────
+  let dragI=null;
+  function wireItemDrag(row){
+    row.addEventListener("dragstart",()=>{ dragI=+row.dataset.i; row.classList.add("dragging"); });
+    row.addEventListener("dragend",()=>{ dragI=null; row.classList.remove("dragging"); document.querySelectorAll(".item.over").forEach(x=>x.classList.remove("over")); });
+    row.addEventListener("dragover",(e)=>{ e.preventDefault(); row.classList.add("over"); });
+    row.addEventListener("dragleave",()=>row.classList.remove("over"));
+    row.addEventListener("drop",(e)=>{ e.preventDefault(); row.classList.remove("over");
+      const p=cur(); const from=dragI, to=+row.dataset.i;
+      if(from==null||from===to) return;
+      const [m]=p.items.splice(from,1); p.items.splice(to,0,m); save(); renderMain();
+    });
+  }
+
+  // ── Present engine ───────────────────────────────────────
+  let pIdx=0, pTimer=null, pStall=null, pPaused=false, pList=[], pSet={};
+  function present(){
+    const p=cur(); if(!p||!p.items.length) return;
+    pList=p.items.slice(); pSet=p.settings; pIdx=0; pPaused=false;
+    $("#stage").classList.add("show");
+    document.documentElement.requestFullscreen?.().catch(()=>{});
+    pShow(); pWake();
+  }
+  function pEnd(){
+    clearTimeout(pTimer); clearTimeout(pStall);
+    $("#stage").querySelectorAll(".media").forEach(m=>{ if(m.tagName==="VIDEO")m.pause(); m.remove(); });
+    $("#stage").classList.remove("show");
+    if(document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+  }
+  function pShow(){
+    clearTimeout(pTimer); clearTimeout(pStall);
+    const st=$("#stage");
+    st.querySelectorAll(".media").forEach(m=>{ if(m.tagName==="VIDEO")m.pause(); m.remove(); });
+    const path=pList[pIdx], u=mediaUrl(path);
+    $("#pPos").textContent=`${pIdx+1} / ${pList.length}`;
+    $("#progress").style.width=`${((pIdx+1)/pList.length)*100}%`;
+    $("#pPlay").innerHTML=pPaused?ICON_PLAY:ICON_PAUSE;
+    let el;
+    if(typeOf(path)==="image"){
+      el=document.createElement("img"); el.className="media"; el.src=u;
+      st.insertBefore(el,$("#progress").nextSibling);
+      requestAnimationFrame(()=>el.classList.add("in"));
+      if(!pPaused) pTimer=setTimeout(pNext, Math.max(1,pSet.imgDur||6)*1000);
+    } else {
+      el=document.createElement("video"); el.className="media"; el.src=u; el.muted=true; el.playsInline=true; el.loop=!!pSet.loopVid;
+      st.insertBefore(el,$("#progress").nextSibling);
+      requestAnimationFrame(()=>el.classList.add("in"));
+      if(!pPaused) el.play().catch(()=>{});
+      el.addEventListener("ended",()=>{ if(!pSet.loopVid && !pPaused) pNext(); });
+      el.addEventListener("error",()=>{ if(!pPaused) pNext(); });
+      el.addEventListener("playing",()=>clearTimeout(pStall),{once:true});
+      pStall=setTimeout(()=>{ if(!pPaused && el.isConnected && el.readyState<2) pNext(); },12000);
+    }
+  }
+  function pNext(){ if(pIdx<pList.length-1) pIdx++; else if(pSet.loopShow) pIdx=0; else return; pShow(); }
+  function pPrev(){ pIdx=(pIdx-1+pList.length)%pList.length; pShow(); }
+  function pTogglePause(){
+    pPaused=!pPaused; const v=$("#stage").querySelector("video.media");
+    if(pPaused){ clearTimeout(pTimer); if(v)v.pause(); }
+    else { if(v)v.play().catch(()=>{}); else pTimer=setTimeout(pNext,Math.max(1,pSet.imgDur||6)*1000); }
+    $("#pPlay").innerHTML=pPaused?ICON_PLAY:ICON_PAUSE;
+  }
+  let pIdle; function pWake(){ const st=$("#stage"); st.classList.remove("idle"); clearTimeout(pIdle); pIdle=setTimeout(()=>st.classList.add("idle"),2800); }
+
+  // ── Wiring ───────────────────────────────────────────────
+  $("#newPl").addEventListener("click", newPlaylist);
+  $("#presentBtn").addEventListener("click", present);
+  $("#plName").addEventListener("input", (e)=>{ const p=cur(); if(p){ p.name=e.target.value; renderSidebar(); save(); } });
+  $("#imgDur").addEventListener("change",(e)=>{ const p=cur(); if(p){ p.settings.imgDur=Math.max(1,+e.target.value||6); save(); } });
+  $("#loopShow").addEventListener("click",()=>{ const p=cur(); if(p){ p.settings.loopShow=!p.settings.loopShow; $("#loopShow").classList.toggle("on",p.settings.loopShow); save(); } });
+  $("#loopVid").addEventListener("click",()=>{ const p=cur(); if(p){ p.settings.loopVid=!p.settings.loopVid; $("#loopVid").classList.toggle("on",p.settings.loopVid); save(); } });
+  $("#libSearch").addEventListener("input", renderLibrary);
+  $("#addAll").addEventListener("click", addAllVisible);
+  $("#pPrev").addEventListener("click",pPrev);
+  $("#pNext").addEventListener("click",pNext);
+  $("#pPlay").addEventListener("click",pTogglePause);
+  $("#pExit").addEventListener("click",pEnd);
+  $("#pFs").addEventListener("click",()=>{ if(document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); });
+  $("#stage").addEventListener("mousemove",pWake);
+  document.addEventListener("keydown",(e)=>{
+    if(!$("#stage").classList.contains("show")) return;
+    if(e.key==="ArrowRight") pNext();
+    else if(e.key==="ArrowLeft") pPrev();
+    else if(e.key===" "){ e.preventDefault(); pTogglePause(); }
+    else if(e.key==="f"||e.key==="F"){ if(document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); }
+    else if(e.key==="Escape" && !document.fullscreenElement) pEnd();
+    pWake();
+  });
+
+  loadState().catch(e=>setStatus("error","Server nicht erreichbar"));
+})();
+</script>
+</body>
+</html>
