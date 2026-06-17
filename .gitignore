@@ -2,8 +2,9 @@
 player-app/src-tauri/target/
 player-app/src-tauri/gen/
 
-# Lokale Nutzerdaten
-player-web/playlists.json
+# Lokale Nutzerdaten — Playlists & Config NIE committen (egal wo)
+**/playlists.json
+**/config.json
 
 # macOS
 .DS_Store
