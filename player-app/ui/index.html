@@ -127,9 +127,20 @@
   .bar .sep{width:1px;height:22px;background:var(--line)}
   .progress{position:fixed;top:0;left:0;height:3px;background:var(--blue);width:0;z-index:61;box-shadow:0 0 10px rgba(0,170,255,.8);transition:width .25s linear}
   .stage.idle .progress{opacity:.5}
+  /* In-App-Update-Banner */
+  #updateBanner{position:fixed;top:0;left:0;right:0;z-index:80;display:none;align-items:center;justify-content:center;gap:14px;padding:10px 44px;background:linear-gradient(90deg,rgba(0,170,255,.20),rgba(255,170,58,.16));border-bottom:1px solid rgba(0,170,255,.45);font-size:13.5px;color:var(--txt);backdrop-filter:blur(6px)}
+  #updateBanner.show{display:flex}
+  #updateBanner b{color:var(--orange)}
+  #updateBanner .x{position:absolute;right:12px;top:8px;cursor:pointer;color:var(--muted);background:none;border:none;font-size:15px}
+  #updateBanner .x:hover{color:var(--txt)}
 </style>
 </head>
 <body>
+<div id="updateBanner">
+  <span>Update <b id="updateVer"></b> verfügbar.</span>
+  <button class="btn primary" id="updateBtn" style="padding:6px 13px">Jetzt installieren</button>
+  <button class="x" id="updateDismiss" title="Später">✕</button>
+</div>
 <div class="app">
   <header>
     <div class="brand">
@@ -240,6 +251,13 @@
     if(!confirm(`Aus der Bibliothek löschen?\n${path}`)) return;
     try{ await invoke("delete_media",{path}); }catch(e){}
     await loadState();
+  }
+  // ── In-App-Update ────────────────────────────────────────
+  async function checkForUpdate(){
+    try{
+      const v = await invoke("check_update");
+      if(v){ $("#updateVer").textContent = "v"+v; $("#updateBanner").classList.add("show"); }
+    }catch(e){ /* offline / kein Release → kein Banner */ }
   }
   let saveTimer=null;
   function setStatus(kind, txt){ const s=$("#status"); s.className="status"+(kind?" "+kind:""); $("#statusTxt").textContent=txt; }
@@ -469,7 +487,13 @@
     pWake();
   });
 
-  loadState().catch(e=>setStatus("error","Backend-Fehler: "+e));
+  $("#updateBtn").addEventListener("click", async ()=>{
+    const b=$("#updateBtn"); b.textContent="Lädt & installiert…"; b.disabled=true;
+    try{ await invoke("install_update"); }catch(e){ b.textContent="Fehler"; }
+  });
+  $("#updateDismiss").addEventListener("click", ()=> $("#updateBanner").classList.remove("show"));
+
+  loadState().then(checkForUpdate).catch(e=>setStatus("error","Backend-Fehler: "+e));
 })();
 </script>
 </body>

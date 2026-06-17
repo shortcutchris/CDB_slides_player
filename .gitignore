@@ -8,3 +8,6 @@ player-app/src-tauri/gen/
 
 # macOS
 .DS_Store
+
+# Updater-Manifest (Release-Artefakt)
+**/latest.json

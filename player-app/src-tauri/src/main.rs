@@ -10,6 +10,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_updater::UpdaterExt;
 
 const MEDIA_EXT: &[&str] = &[
     "png", "jpg", "jpeg", "webp", "gif", "avif", "bmp", "mp4", "webm", "mov", "m4v", "ogv",
@@ -214,9 +215,36 @@ fn delete_media(app: tauri::AppHandle, path: String) -> Result<(), String> {
     fs::remove_file(&canon).map_err(|e| e.to_string())
 }
 
+// ── In-App-Update (Tauri-Updater-Plugin) ─────────────────────────────────────
+/// Prüft den Update-Endpoint. Gibt die neue Version zurück, falls verfügbar,
+/// sonst null. Fehler (offline / kein Release) → null (kein Banner).
+#[tauri::command]
+async fn check_update(app: tauri::AppHandle) -> Option<String> {
+    let updater = app.updater().ok()?;
+    match updater.check().await {
+        Ok(Some(update)) => Some(update.version),
+        _ => None,
+    }
+}
+
+/// Lädt das verfügbare Update herunter, installiert es und startet die App neu.
+#[tauri::command]
+async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    if let Some(update) = updater.check().await.map_err(|e| e.to_string())? {
+        update
+            .download_and_install(|_, _| {}, || {})
+            .await
+            .map_err(|e| e.to_string())?;
+        app.restart();
+    }
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             scan_media,
             get_media_dir,
@@ -224,7 +252,9 @@ fn main() {
             save_playlists,
             import_folder,
             import_files,
-            delete_media
+            delete_media,
+            check_update,
+            install_update
         ])
         .run(tauri::generate_context!())
         .expect("Fehler beim Starten der Anwendung");
