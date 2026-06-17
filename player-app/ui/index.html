@@ -107,6 +107,9 @@
   .lib .nm{position:absolute;left:0;right:0;bottom:0;padding:5px 7px;font-size:10.5px;background:linear-gradient(0deg,rgba(6,15,32,.93),transparent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#cdd6e4}
   .lib .add{position:absolute;top:6px;right:6px;width:24px;height:24px;border-radius:7px;background:rgba(0,170,255,.9);color:#06101f;display:flex;align-items:center;justify-content:center;opacity:0;transition:.12s}
   .lib:hover .add{opacity:1}
+  .lib .libdel{position:absolute;bottom:6px;right:6px;width:24px;height:24px;border-radius:7px;background:rgba(6,15,32,.85);border:1px solid var(--line);color:var(--muted);display:flex;align-items:center;justify-content:center;opacity:0;transition:.12s;cursor:pointer}
+  .lib:hover .libdel{opacity:1}
+  .lib .libdel:hover{color:var(--danger);border-color:rgba(255,106,106,.4)}
   .lib .tp{position:absolute;top:6px;left:6px;font-size:9px;font-weight:700;padding:2px 5px;border-radius:5px;background:rgba(6,15,32,.85);color:var(--muted)}
   .lib .tp.vid{color:var(--orange)}
 
@@ -134,7 +137,8 @@
       <div><div class="sub">CDBRAIN</div><h1>Slide Player — Verwaltung</h1></div>
     </div>
     <div class="hgroup">
-      <button class="btn" id="chooseFolder" title="Medien-Ordner wählen"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg> <span id="folderName">Ordner wählen…</span></button>
+      <button class="btn" id="importFolder" title="Ordner importieren (in die Bibliothek kopieren)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg> Ordner importieren</button>
+      <button class="btn" id="importFiles" title="Einzelne Dateien importieren">Dateien</button>
       <div class="status" id="status"><span class="dot"></span><span id="statusTxt">Gespeichert</span></div>
       <button class="btn primary" id="presentBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg> Präsentieren</button>
     </div>
@@ -212,20 +216,29 @@
 
   // ── API (Tauri-Backend) ──────────────────────────────────
   async function loadState(){
-    mediaRoot = await invoke("get_media_root");
-    state.media = mediaRoot ? await invoke("scan_media",{root:mediaRoot}) : [];
+    mediaRoot = await invoke("get_media_dir");           // verwalteter Medien-Ordner
+    state.media = await invoke("scan_media");
     const pl = await invoke("load_playlists");
     state.playlists = (pl && pl.playlists) || [];
     if(!state.curId || !state.playlists.find(p=>p.id===state.curId))
       state.curId = state.playlists[0]?.id || null;
-    $("#folderName").textContent = mediaRoot ? mediaRoot.split("/").pop() : "Ordner wählen…";
     renderAll();
   }
-  async function chooseFolder(){
-    const path = await invoke("pick_folder");
-    if(!path) return;
-    await invoke("set_media_root",{path});
-    state.curId = state.curId; // behalten
+  async function importFolder(){
+    setStatus("saving","Importiere…");
+    const n = await invoke("import_folder");
+    await loadState();
+    setStatus("", n ? `${n} importiert` : "Gespeichert");
+  }
+  async function importFiles(){
+    setStatus("saving","Importiere…");
+    const n = await invoke("import_files");
+    await loadState();
+    setStatus("", n ? `${n} importiert` : "Gespeichert");
+  }
+  async function deleteMedia(path){
+    if(!confirm(`Aus der Bibliothek löschen?\n${path}`)) return;
+    try{ await invoke("delete_media",{path}); }catch(e){}
     await loadState();
   }
   let saveTimer=null;
@@ -333,10 +346,10 @@
   }
   function renderLibrary(){
     const el=$("#library"); el.innerHTML="";
-    if(!mediaRoot){
+    if(!state.media.length){
       $("#mediaCount").textContent="";
-      el.innerHTML=`<div class="empty"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><div>Noch kein Medien-Ordner gewählt.</div><button class="btn" id="pickFromLib">Ordner wählen…</button></div>`;
-      $("#pickFromLib").addEventListener("click",chooseFolder);
+      el.innerHTML=`<div class="empty"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><div>Bibliothek ist leer.<br>Medien importieren, dann landen sie hier.</div><button class="btn" id="importFromLib">Ordner importieren</button></div>`;
+      $("#importFromLib").addEventListener("click",importFolder);
       return;
     }
     const q=$("#libSearch").value.trim().toLowerCase();
@@ -351,7 +364,9 @@
         const c=document.createElement("div"); c.className="lib"; c.title="Hinzufügen: "+m.path;
         c.innerHTML=`${thumb(m.path)}<div class="tp ${m.type==='video'?'vid':''}">${m.type==='video'?'VIDEO':'BILD'}</div>
           <div class="add"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+          <button class="libdel" title="Aus Bibliothek löschen"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
           <div class="nm">${esc(m.name)}</div>`;
+        c.querySelector(".libdel").addEventListener("click",(e)=>{ e.stopPropagation(); deleteMedia(m.path); });
         c.addEventListener("click",()=>{ if(cur()) addItem(m.path); else { newPlaylist(); addItem(m.path); } });
         grid.appendChild(c);
       });
@@ -436,7 +451,8 @@
   $("#loopVid").addEventListener("click",()=>{ const p=cur(); if(p){ p.settings.loopVid=!p.settings.loopVid; $("#loopVid").classList.toggle("on",p.settings.loopVid); save(); } });
   $("#libSearch").addEventListener("input", renderLibrary);
   $("#addAll").addEventListener("click", addAllVisible);
-  $("#chooseFolder").addEventListener("click", chooseFolder);
+  $("#importFolder").addEventListener("click", importFolder);
+  $("#importFiles").addEventListener("click", importFiles);
   $("#pPrev").addEventListener("click",pPrev);
   $("#pNext").addEventListener("click",pNext);
   $("#pPlay").addEventListener("click",pTogglePause);
