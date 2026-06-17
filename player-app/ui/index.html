@@ -312,8 +312,8 @@
   function thumb(path){
     const t = typeOf(path), u = mediaUrl(path);
     return t==="video"
-      ? `<video src="${u}" muted preload="metadata"></video><div class="pb"><svg width="11" height="11" viewBox="0 0 24 24" fill="#06101f"><polygon points="7 5 19 12 7 19 7 5"/></svg></div>`
-      : `<img src="${u}" alt="">`;
+      ? `<video src="${u}" muted preload="metadata" draggable="false"></video><div class="pb"><svg width="11" height="11" viewBox="0 0 24 24" fill="#06101f"><polygon points="7 5 19 12 7 19 7 5"/></svg></div>`
+      : `<img src="${u}" alt="" draggable="false">`;
   }
   function renderSidebar(){
     const el=$("#plList"); el.innerHTML="";
@@ -399,11 +399,13 @@
   // ── Drag reorder (items) ─────────────────────────────────
   let dragI=null;
   function wireItemDrag(row){
-    row.addEventListener("dragstart",()=>{ dragI=+row.dataset.i; row.classList.add("dragging"); });
+    row.addEventListener("dragstart",(e)=>{ dragI=+row.dataset.i; row.classList.add("dragging");
+      if(e.dataTransfer){ e.dataTransfer.effectAllowed="move"; try{ e.dataTransfer.setData("text/plain", String(dragI)); }catch(_){} } });
     row.addEventListener("dragend",()=>{ dragI=null; row.classList.remove("dragging"); document.querySelectorAll(".item.over").forEach(x=>x.classList.remove("over")); });
-    row.addEventListener("dragover",(e)=>{ e.preventDefault(); row.classList.add("over"); });
+    row.addEventListener("dragover",(e)=>{ e.preventDefault(); if(e.dataTransfer) e.dataTransfer.dropEffect="move"; row.classList.add("over"); });
+    row.addEventListener("dragenter",(e)=>{ e.preventDefault(); row.classList.add("over"); });
     row.addEventListener("dragleave",()=>row.classList.remove("over"));
-    row.addEventListener("drop",(e)=>{ e.preventDefault(); row.classList.remove("over");
+    row.addEventListener("drop",(e)=>{ e.preventDefault(); e.stopPropagation(); row.classList.remove("over");
       const p=cur(); const from=dragI, to=+row.dataset.i;
       if(from==null||from===to) return;
       const [m]=p.items.splice(from,1); p.items.splice(to,0,m); save(); renderMain();
