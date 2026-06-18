@@ -107,6 +107,22 @@
   .libgroup .gpl:hover{border-color:rgba(0,170,255,.55);color:var(--txt)}
   .libreset{display:flex;align-items:center;gap:8px;margin:0 4px 8px;font-size:12px;color:var(--blue);cursor:pointer}
   .libreset:hover{text-decoration:underline}
+  .btn.icon{padding:9px 10px}
+  .btn:disabled{opacity:.35;cursor:not-allowed}
+  #histPanel{position:fixed;top:60px;right:14px;width:300px;max-height:64vh;display:none;flex-direction:column;z-index:70;background:#0a1428;border:1px solid var(--line);border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.55);overflow:hidden}
+  #histPanel.show{display:flex}
+  #histPanel .hh{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
+  #histPanel .hh h3{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  #histPanel .hh .x{cursor:pointer;color:var(--muted);background:none;border:none;font-size:15px}
+  #histList{overflow:auto;padding:6px}
+  .hitem{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:9px;cursor:pointer;font-size:13px;color:var(--muted)}
+  .hitem:hover{background:var(--panel)}
+  .hitem .dot{width:8px;height:8px;border-radius:50%;background:var(--line);flex:0 0 auto}
+  .hitem .lbl{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hitem.cur{color:var(--txt);background:rgba(0,170,255,.10)}
+  .hitem.cur .dot{background:var(--blue);box-shadow:0 0 8px var(--blue)}
+  .hitem.future{opacity:.5}
+  .hitem .idx{font-size:10.5px;color:var(--muted)}
   .libgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
   .lib{position:relative;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#0a1428;aspect-ratio:16/9;cursor:pointer}
   .lib:hover{border-color:rgba(0,170,255,.6)}
@@ -141,10 +157,17 @@
       <div><div class="sub">CDBRAIN</div><h1>Slide Player — Verwaltung</h1></div>
     </div>
     <div class="hgroup">
+      <button class="btn icon" id="undoBtn" title="Rückgängig (⌘Z)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a6 6 0 0 1 0 12h-3"/></svg></button>
+      <button class="btn icon" id="redoBtn" title="Wiederherstellen (⌘⇧Z)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a6 6 0 0 0 0 12h3"/></svg></button>
+      <button class="btn" id="histBtn" title="Verlauf"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg> Verlauf</button>
       <div class="status" id="status"><span class="dot"></span><span id="statusTxt">Gespeichert</span></div>
       <button class="btn primary" id="presentBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg> Präsentieren</button>
     </div>
   </header>
+  <div id="histPanel">
+    <div class="hh"><h3>Verlauf</h3><button class="x" id="histClose" title="Schließen">✕</button></div>
+    <div id="histList"></div>
+  </div>
 
   <main>
     <!-- Playlists sidebar -->
@@ -213,6 +236,39 @@
   let state = {media:[], playlists:[], curId:null};
   let libGroupFilter = null;
 
+  // ── Verlauf (Undo/Redo) ──────────────────────────────────
+  let history=[], hist=-1;
+  const snapshot = () => JSON.parse(JSON.stringify(state.playlists));
+  function initHistory(){ history=[{label:"Start", st:snapshot(), curId:state.curId}]; hist=0; renderHistory(); }
+  function commit(label){
+    history = history.slice(0, hist+1);
+    history.push({label, st:snapshot(), curId:state.curId});
+    if(history.length>150) history.shift();
+    hist = history.length-1;
+    save(); renderHistory();
+  }
+  function restoreHist(idx){
+    if(idx<0 || idx>=history.length) return;
+    hist=idx; const h=history[idx];
+    state.playlists = JSON.parse(JSON.stringify(h.st));
+    state.curId = state.playlists.find(p=>p.id===h.curId)?.id || state.playlists[0]?.id || null;
+    save(); renderAll(); renderHistory();
+  }
+  const undo = () => { if(hist>0) restoreHist(hist-1); };
+  const redo = () => { if(hist<history.length-1) restoreHist(hist+1); };
+  function renderHistory(){
+    const ub=$("#undoBtn"), rb=$("#redoBtn"); if(ub) ub.disabled = hist<=0; if(rb) rb.disabled = hist>=history.length-1;
+    const el=$("#histList"); if(!el) return; el.innerHTML="";
+    history.forEach((h,i)=>{
+      const row=document.createElement("div");
+      row.className="hitem"+(i===hist?" cur":"")+(i>hist?" future":"");
+      row.innerHTML=`<span class="dot"></span><span class="lbl">${esc(h.label)}</span><span class="idx">${i===hist?"jetzt":""}</span>`;
+      row.addEventListener("click",()=>restoreHist(i));
+      el.appendChild(row);
+    });
+    const c=el.querySelector(".hitem.cur"); if(c) c.scrollIntoView({block:"nearest"});
+  }
+
   // ── API ──────────────────────────────────────────────────
   async function loadState(){
     const r = await fetch("/api/state");
@@ -220,6 +276,7 @@
     state.media = d.media; state.playlists = d.playlists;
     if(!state.curId || !state.playlists.find(p=>p.id===state.curId))
       state.curId = state.playlists[0]?.id || null;
+    if(!history.length) initHistory();
     renderAll();
   }
   let saveTimer=null, saving=false;
@@ -241,42 +298,42 @@
   // ── Playlist CRUD ────────────────────────────────────────
   function newPlaylist(){
     const p = {id:uid(), name:"Neue Playlist", settings:{imgDur:6,loopShow:true,loopVid:false}, items:[]};
-    state.playlists.push(p); state.curId=p.id; save(); renderAll(); $("#plName").focus(); $("#plName").select();
+    state.playlists.push(p); state.curId=p.id; commit("Playlist angelegt"); renderAll(); $("#plName").focus(); $("#plName").select();
   }
   function duplicatePlaylist(id){
     const src = state.playlists.find(p=>p.id===id); if(!src) return;
     const copy = {id:uid(), name:src.name+" (Kopie)", settings:{...src.settings}, items:[...src.items]};
     const i = state.playlists.indexOf(src); state.playlists.splice(i+1,0,copy);
-    state.curId=copy.id; save(); renderAll();
+    state.curId=copy.id; commit("Playlist dupliziert"); renderAll();
   }
   function deletePlaylist(id){
     const p = state.playlists.find(x=>x.id===id); if(!p) return;
     if(!confirm(`Playlist „${p.name}" löschen?`)) return;
     state.playlists = state.playlists.filter(x=>x.id!==id);
     if(state.curId===id) state.curId = state.playlists[0]?.id || null;
-    save(); renderAll();
+    commit("Playlist gelöscht"); renderAll();
   }
   const selectPlaylist = (id) => { state.curId=id; renderAll(); };
 
   // ── Items ────────────────────────────────────────────────
-  function addItem(path){ const p=cur(); if(!p) return; p.items.push(path); save(); renderMain(); renderSidebar(); }
-  function removeItem(i){ const p=cur(); p.items.splice(i,1); save(); renderMain(); renderSidebar(); }
+  function addItem(path){ const p=cur(); if(!p) return; p.items.push(path); commit("Slide hinzugefügt"); renderMain(); renderSidebar(); }
+  function removeItem(i){ const p=cur(); p.items.splice(i,1); commit("Slide entfernt"); renderMain(); renderSidebar(); }
   function moveItem(i,dir){ const p=cur(); const j=i+dir; if(j<0||j>=p.items.length) return;
-    [p.items[i],p.items[j]]=[p.items[j],p.items[i]]; save(); renderMain(); }
+    [p.items[i],p.items[j]]=[p.items[j],p.items[i]]; commit("Verschoben"); renderMain(); }
   function addAllVisible(){
     const q=$("#libSearch").value.trim().toLowerCase();
     const list=state.media.filter(m=>!q||m.path.toLowerCase().includes(q));
     if(!list.length) return;
     if(!cur()) newPlaylist();
     list.forEach(m=>cur().items.push(m.path));
-    save(); renderMain(); renderSidebar();
+    commit("Alle hinzugefügt"); renderMain(); renderSidebar();
   }
   function folderToPlaylist(dirKey){
     const items = state.media.filter(m=>(m.dir||".")===dirKey).map(m=>m.path);
     if(!items.length) return;
     const name = dirKey==="." ? "Wurzel" : dirKey.split("/").pop();
     const p = {id:uid(), name, settings:{imgDur:6,loopShow:true,loopVid:true}, items};
-    state.playlists.push(p); state.curId=p.id; save(); renderAll();
+    state.playlists.push(p); state.curId=p.id; commit("Ordner → Playlist"); renderAll();
   }
 
   // ── Render ───────────────────────────────────────────────
@@ -383,7 +440,7 @@
     row.addEventListener("drop",(e)=>{ e.preventDefault(); e.stopPropagation(); row.classList.remove("over");
       const p=cur(); const from=dragI, to=+row.dataset.i;
       if(from==null||from===to) return;
-      const [m]=p.items.splice(from,1); p.items.splice(to,0,m); save(); renderMain();
+      const [m]=p.items.splice(from,1); p.items.splice(to,0,m); commit("Verschoben"); renderMain();
     });
   }
 
@@ -441,9 +498,21 @@
   $("#newPl").addEventListener("click", newPlaylist);
   $("#presentBtn").addEventListener("click", present);
   $("#plName").addEventListener("input", (e)=>{ const p=cur(); if(p){ p.name=e.target.value; renderSidebar(); save(); } });
-  $("#imgDur").addEventListener("change",(e)=>{ const p=cur(); if(p){ p.settings.imgDur=Math.max(1,+e.target.value||6); save(); } });
-  $("#loopShow").addEventListener("click",()=>{ const p=cur(); if(p){ p.settings.loopShow=!p.settings.loopShow; $("#loopShow").classList.toggle("on",p.settings.loopShow); save(); } });
-  $("#loopVid").addEventListener("click",()=>{ const p=cur(); if(p){ p.settings.loopVid=!p.settings.loopVid; $("#loopVid").classList.toggle("on",p.settings.loopVid); save(); } });
+  $("#plName").addEventListener("change", ()=>{ if(cur()) commit("Umbenannt"); });
+  $("#imgDur").addEventListener("change",(e)=>{ const p=cur(); if(p){ p.settings.imgDur=Math.max(1,+e.target.value||6); commit("Bilddauer"); } });
+  $("#loopShow").addEventListener("click",()=>{ const p=cur(); if(p){ p.settings.loopShow=!p.settings.loopShow; $("#loopShow").classList.toggle("on",p.settings.loopShow); commit("Show-Loop"); } });
+  $("#loopVid").addEventListener("click",()=>{ const p=cur(); if(p){ p.settings.loopVid=!p.settings.loopVid; $("#loopVid").classList.toggle("on",p.settings.loopVid); commit("Video-Loop"); } });
+  $("#undoBtn").addEventListener("click", undo);
+  $("#redoBtn").addEventListener("click", redo);
+  $("#histBtn").addEventListener("click",(e)=>{ e.stopPropagation(); $("#histPanel").classList.toggle("show"); });
+  $("#histClose").addEventListener("click", ()=> $("#histPanel").classList.remove("show"));
+  document.addEventListener("click",(e)=>{ const pnl=$("#histPanel"); if(pnl.classList.contains("show") && !pnl.contains(e.target) && e.target.closest("#histBtn")==null) pnl.classList.remove("show"); });
+  document.addEventListener("keydown",(e)=>{
+    if($("#stage").classList.contains("show")) return;
+    const t=e.target; if(t && (t.tagName==="INPUT"||t.tagName==="TEXTAREA")) return;
+    if((e.metaKey||e.ctrlKey) && (e.key==="z"||e.key==="Z")){ e.preventDefault(); e.shiftKey?redo():undo(); }
+    else if((e.metaKey||e.ctrlKey) && (e.key==="y"||e.key==="Y")){ e.preventDefault(); redo(); }
+  });
   $("#libSearch").addEventListener("input", renderLibrary);
   $("#addAll").addEventListener("click", addAllVisible);
   $("#pPrev").addEventListener("click",pPrev);
