@@ -99,7 +99,14 @@
   .libsearch{margin:0 12px 10px;display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:8px 11px}
   .libsearch input{flex:1;background:transparent;border:none;color:var(--txt);font-size:13px}
   .libsearch input:focus{outline:none}
-  .libgroup{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:12px 4px 7px}
+  .libgroup{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:12px 4px 7px}
+  .libgroup .gname{cursor:pointer;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .libgroup .gname:hover{color:var(--txt)}
+  .libgroup.activef .gname{color:var(--blue)}
+  .libgroup .gpl{cursor:pointer;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:3px 8px;font-size:10px;letter-spacing:.05em;background:var(--panel);white-space:nowrap}
+  .libgroup .gpl:hover{border-color:rgba(0,170,255,.55);color:var(--txt)}
+  .libreset{display:flex;align-items:center;gap:8px;margin:0 4px 8px;font-size:12px;color:var(--blue);cursor:pointer}
+  .libreset:hover{text-decoration:underline}
   .libgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
   .lib{position:relative;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#0a1428;aspect-ratio:16/9;cursor:pointer}
   .lib:hover{border-color:rgba(0,170,255,.6)}
@@ -204,6 +211,7 @@
   const ICON_PAUSE = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
 
   let state = {media:[], playlists:[], curId:null};
+  let libGroupFilter = null;
 
   // ── API ──────────────────────────────────────────────────
   async function loadState(){
@@ -262,6 +270,13 @@
     if(!cur()) newPlaylist();
     list.forEach(m=>cur().items.push(m.path));
     save(); renderMain(); renderSidebar();
+  }
+  function folderToPlaylist(dirKey){
+    const items = state.media.filter(m=>(m.dir||".")===dirKey).map(m=>m.path);
+    if(!items.length) return;
+    const name = dirKey==="." ? "Wurzel" : dirKey.split("/").pop();
+    const p = {id:uid(), name, settings:{imgDur:6,loopShow:true,loopVid:true}, items};
+    state.playlists.push(p); state.curId=p.id; save(); renderAll();
   }
 
   // ── Render ───────────────────────────────────────────────
@@ -322,10 +337,22 @@
     const q=$("#libSearch").value.trim().toLowerCase();
     const el=$("#library"); el.innerHTML="";
     $("#mediaCount").textContent = `${state.media.length} Dateien`;
+    if(libGroupFilter!=null){
+      const r=document.createElement("div"); r.className="libreset";
+      r.innerHTML=`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg> nur „${libGroupFilter==="."?"Wurzel":libGroupFilter}" — alle anzeigen`;
+      r.addEventListener("click",()=>{ libGroupFilter=null; renderLibrary(); });
+      el.appendChild(r);
+    }
     const groups={};
-    state.media.filter(m=>!q || m.path.toLowerCase().includes(q)).forEach(m=>{ (groups[m.dir||"."]=groups[m.dir||"."]||[]).push(m); });
+    state.media.filter(m=>!q || m.path.toLowerCase().includes(q))
+      .filter(m=> libGroupFilter==null || (m.dir||".")===libGroupFilter)
+      .forEach(m=>{ (groups[m.dir||"."]=groups[m.dir||"."]||[]).push(m); });
     Object.keys(groups).sort().forEach(dir=>{
-      const h=document.createElement("div"); h.className="libgroup"; h.textContent = dir==="." ? "(Wurzel)" : dir;
+      const h=document.createElement("div"); h.className="libgroup"+(libGroupFilter===dir?" activef":"");
+      const label = dir==="." ? "(Wurzel)" : dir;
+      h.innerHTML=`<span class="gname" title="Nur diesen Ordner zeigen">${esc(label)}</span><button class="gpl" title="Ganzen Ordner als neue Playlist">→ Playlist</button>`;
+      h.querySelector(".gname").addEventListener("click",()=>{ libGroupFilter = (libGroupFilter===dir?null:dir); renderLibrary(); });
+      h.querySelector(".gpl").addEventListener("click",(e)=>{ e.stopPropagation(); folderToPlaylist(dir); });
       el.appendChild(h);
       const grid=document.createElement("div"); grid.className="libgrid";
       groups[dir].forEach(m=>{

@@ -99,7 +99,14 @@
   .libsearch{margin:0 12px 10px;display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:8px 11px}
   .libsearch input{flex:1;background:transparent;border:none;color:var(--txt);font-size:13px}
   .libsearch input:focus{outline:none}
-  .libgroup{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:12px 4px 7px}
+  .libgroup{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:12px 4px 7px}
+  .libgroup .gname{cursor:pointer;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .libgroup .gname:hover{color:var(--txt)}
+  .libgroup.activef .gname{color:var(--blue)}
+  .libgroup .gpl{cursor:pointer;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:3px 8px;font-size:10px;letter-spacing:.05em;background:var(--panel);white-space:nowrap}
+  .libgroup .gpl:hover{border-color:rgba(0,170,255,.55);color:var(--txt)}
+  .libreset{display:flex;align-items:center;gap:8px;margin:0 4px 8px;font-size:12px;color:var(--blue);cursor:pointer}
+  .libreset:hover{text-decoration:underline}
   .libgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
   .lib{position:relative;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#0a1428;aspect-ratio:16/9;cursor:pointer}
   .lib:hover{border-color:rgba(0,170,255,.6)}
@@ -133,6 +140,15 @@
   #updateBanner b{color:var(--orange)}
   #updateBanner .x{position:absolute;right:12px;top:8px;cursor:pointer;color:var(--muted);background:none;border:none;font-size:15px}
   #updateBanner .x:hover{color:var(--txt)}
+  /* Bestätigungs-Modal */
+  .modal{position:fixed;inset:0;z-index:90;display:none;align-items:center;justify-content:center;background:rgba(3,8,18,.66);backdrop-filter:blur(3px)}
+  .modal.show{display:flex}
+  .modal .box{width:400px;max-width:90vw;background:#0a1428;border:1px solid var(--line);border-radius:16px;padding:22px 24px;box-shadow:0 24px 70px rgba(0,0,0,.55)}
+  .modal .ttl{font-size:16px;font-weight:800;margin-bottom:9px}
+  .modal .msg{font-size:13.5px;color:var(--muted);line-height:1.5;white-space:pre-wrap;word-break:break-word}
+  .modal .row{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}
+  .modal .danger{background:linear-gradient(135deg,#ff7a7a,#ff5a5a);color:#220707;border:none;font-weight:800}
+  .modal .danger:hover{filter:brightness(1.05)}
 </style>
 </head>
 <body>
@@ -140,6 +156,16 @@
   <span>Update <b id="updateVer"></b> verfügbar.</span>
   <button class="btn primary" id="updateBtn" style="padding:6px 13px">Jetzt installieren</button>
   <button class="x" id="updateDismiss" title="Später">✕</button>
+</div>
+<div class="modal" id="modal">
+  <div class="box">
+    <div class="ttl" id="modalTitle">Bestätigen</div>
+    <div class="msg" id="modalMsg"></div>
+    <div class="row">
+      <button class="btn" id="modalCancel">Abbrechen</button>
+      <button class="btn danger" id="modalOk">Löschen</button>
+    </div>
+  </div>
 </div>
 <div class="app">
   <header>
@@ -224,6 +250,19 @@
   const ICON_PAUSE = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
 
   let state = {media:[], playlists:[], curId:null};
+  let libGroupFilter = null;   // Bibliothek auf eine Gruppe (Ordner) filtern
+
+  // ── Bestätigungs-Modal (statt window.confirm, das in WKWebView nicht zuverlässig ist) ──
+  function confirmModal(msg, {title="Bestätigen", ok="Löschen"}={}){
+    return new Promise(res=>{
+      $("#modalTitle").textContent=title; $("#modalMsg").textContent=msg; $("#modalOk").textContent=ok;
+      const m=$("#modal"); m.classList.add("show");
+      const done=(v)=>{ m.classList.remove("show"); $("#modalOk").onclick=null; $("#modalCancel").onclick=null; document.removeEventListener("keydown",key); res(v); };
+      const key=(e)=>{ if(e.key==="Escape"){e.preventDefault();done(false);} else if(e.key==="Enter"){e.preventDefault();done(true);} };
+      $("#modalOk").onclick=()=>done(true); $("#modalCancel").onclick=()=>done(false);
+      document.addEventListener("keydown",key);
+    });
+  }
 
   // ── API (Tauri-Backend) ──────────────────────────────────
   async function loadState(){
@@ -248,7 +287,7 @@
     setStatus("", n ? `${n} importiert` : "Gespeichert");
   }
   async function deleteMedia(path){
-    if(!confirm(`Aus der Bibliothek löschen?\n${path}`)) return;
+    if(!(await confirmModal(`Diese Datei aus der Bibliothek löschen?\n\n${path}`, {title:"Asset löschen"}))) return;
     try{ await invoke("delete_media",{path}); }catch(e){}
     await loadState();
   }
@@ -285,9 +324,9 @@
     const i = state.playlists.indexOf(src); state.playlists.splice(i+1,0,copy);
     state.curId=copy.id; save(); renderAll();
   }
-  function deletePlaylist(id){
+  async function deletePlaylist(id){
     const p = state.playlists.find(x=>x.id===id); if(!p) return;
-    if(!confirm(`Playlist „${p.name}" löschen?`)) return;
+    if(!(await confirmModal(`Playlist „${p.name}" löschen?`, {title:"Playlist löschen"}))) return;
     state.playlists = state.playlists.filter(x=>x.id!==id);
     if(state.curId===id) state.curId = state.playlists[0]?.id || null;
     save(); renderAll();
@@ -306,6 +345,14 @@
     if(!cur()) newPlaylist();
     list.forEach(m=>cur().items.push(m.path));
     save(); renderMain(); renderSidebar();
+  }
+  // Ganzen Ordner (Gruppe) als neue Playlist anlegen
+  function folderToPlaylist(dirKey){
+    const items = state.media.filter(m=>(m.dir||".")===dirKey).map(m=>m.path);
+    if(!items.length) return;
+    const name = dirKey==="." ? "Wurzel" : dirKey.split("/").pop();
+    const p = {id:uid(), name, settings:{imgDur:6,loopShow:true,loopVid:true}, items};
+    state.playlists.push(p); state.curId=p.id; save(); renderAll();
   }
 
   // ── Render ───────────────────────────────────────────────
@@ -372,10 +419,23 @@
     }
     const q=$("#libSearch").value.trim().toLowerCase();
     $("#mediaCount").textContent = `${state.media.length} Dateien`;
+    // aktiver Gruppen-Filter → Reset-Zeile
+    if(libGroupFilter!=null){
+      const r=document.createElement("div"); r.className="libreset";
+      r.innerHTML=`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg> nur „${libGroupFilter==="."?"Wurzel":libGroupFilter}" — alle anzeigen`;
+      r.addEventListener("click",()=>{ libGroupFilter=null; renderLibrary(); });
+      el.appendChild(r);
+    }
     const groups={};
-    state.media.filter(m=>!q || m.path.toLowerCase().includes(q)).forEach(m=>{ (groups[m.dir||"."]=groups[m.dir||"."]||[]).push(m); });
+    state.media.filter(m=>!q || m.path.toLowerCase().includes(q))
+      .filter(m=> libGroupFilter==null || (m.dir||".")===libGroupFilter)
+      .forEach(m=>{ (groups[m.dir||"."]=groups[m.dir||"."]||[]).push(m); });
     Object.keys(groups).sort().forEach(dir=>{
-      const h=document.createElement("div"); h.className="libgroup"; h.textContent = dir==="." ? "(Wurzel)" : dir;
+      const h=document.createElement("div"); h.className="libgroup"+(libGroupFilter===dir?" activef":"");
+      const label = dir==="." ? "(Wurzel)" : dir;
+      h.innerHTML=`<span class="gname" title="Nur diesen Ordner zeigen">${esc(label)}</span><button class="gpl" title="Ganzen Ordner als neue Playlist">→ Playlist</button>`;
+      h.querySelector(".gname").addEventListener("click",()=>{ libGroupFilter = (libGroupFilter===dir?null:dir); renderLibrary(); });
+      h.querySelector(".gpl").addEventListener("click",(e)=>{ e.stopPropagation(); folderToPlaylist(dir); });
       el.appendChild(h);
       const grid=document.createElement("div"); grid.className="libgrid";
       groups[dir].forEach(m=>{
